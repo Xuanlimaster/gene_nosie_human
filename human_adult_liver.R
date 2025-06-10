@@ -424,7 +424,7 @@ p8 <- ggplot(gene_stats %>% filter(gene_class %in% c("HVG", "LVG")),
         plot.subtitle = element_text(hjust = 0.5, size = 12),
         legend.position = "top")
 # Save Plot 8
-p8_path <- file.path(noise_path, "Geweke.png")
+p8_path <- file.path(noise_path, "chi.png")
 ggsave(p8_path, plot = p8, width = 10, height = 5, dpi = 600)
 
 # Wilcoxon test for expression noise
@@ -455,7 +455,7 @@ p9 <- ggplot(rowData(sce), aes(x = miRNA_target, y = Epsilon, fill = miRNA_targe
         plot.subtitle = element_text(hjust = 0.5, size = 12),
         legend.position = "none")
 # Save Plot 9
-p9_path <- file.path(noise_path, "Geweke.png")
+p9_path <- file.path(noise_path, "wilcoxon.png")
 ggsave(p9_path, plot = p9, width = 10, height = 5, dpi = 600)
 
 # Combined plot
@@ -463,5 +463,5 @@ p10 <- p8 + p9 +
   plot_layout(widths = c(1, 1)) +
   plot_annotation(tag_levels = 'A')
 # Save Plot 10
-p10_path <- file.path(noise_path, "Geweke.png")
+p10_path <- file.path(noise_path, "wilcoxon_chi.png")
 ggsave(p10_path, plot = p10, width = 10, height = 5, dpi = 600)
