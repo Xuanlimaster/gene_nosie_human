@@ -225,3 +225,22 @@ batch_score <- reducedDim(sce, "UMAP") %>%
 #   - Similar scores for technical replicates (e.g. donor2_S1/S2 = 7.39/7.39)
 #   - Large differences suggest batch effects needing correction
 print(batch_score)
+
+# Run BASiCS MCMC
+chain <- BASiCS_MCMC(
+  sce, 
+  N = 30000,  # Total iterations
+  Thin = 15,  # Keep every 15th sample
+  Burn = 15000,  # Initial samples discarded
+  Regression = TRUE, # Account for technical noise via regression
+  WithSpikes = FALSE, # No spike-in controls available
+  PriorParam = BASiCS_PriorParam(
+    sce,
+    PriorMu = "EmpiricalBayes"), # Empirical Bayes priors for mean expression
+  RunName = "human_adult_liver", # Unique identifier for output
+  Threads = 22, # Parallel processing
+  StoreChains = TRUE, # Save complete MCMC chains
+  StoreDir = dir
+)
+# Load saved MCMC chain (RDS format)
+chain <- readRDS(file.path(dir, "chain_human_adult_liver.Rds"))
