@@ -324,3 +324,66 @@ rowData(sce) <- merge(
   by.x = "ensembl_gene_id", by.y = "GeneName",
   sort = FALSE
 )
+
+dir_targetscan <- "TargetScan"
+# Read TargetScan's predicted target gene information file
+targets_info <- read.delim(
+  file.path(dir_targetscan, "Predicted_Targets_Info.default_predictions.txt"), 
+  stringsAsFactors = FALSE
+)
+# Read TargetScan's context score predictions 
+conserved_scores <- read.delim(
+  file.path(dir_targetscan, "Predicted_Targets_Context_Scores.default_predictions.txt"),
+  stringsAsFactors = FALSE
+)
+
+# Extraction of liver samples and expression matrix (miRNA TissueAtlas 2025)
+dir_atlas <- "miRNATissueAtlas"
+# Read sample large expression matrices
+obs <- read_parquet(file.path(dir_atlas,"expression.parquet"))
+# Read sample metadata containing tissue annotations
+meta <- read_parquet(file.path(dir_atlas,"metadata.parquet"))
+# Merge expression data with metadata using unique sample IDs
+human_mirna <-  merge(obs, meta, by = "__index_level_0__")
+# Filter for liver samples and select miRNA expression columns
+liver_mirna <- human_mirna %>%
+  filter(Tissue == "liver") %>%
+  dplyr::select(2:(ncol(.)-6))
+# Calculation of average miRNA expression in liver
+#   - compute mean expression across all liver samples for each miRNA
+miRNA_means <- liver_mirna %>% 
+  colMeans(na.rm = TRUE) %>% 
+  enframe(name = "miRNA", value = "mean") %>%
+  arrange(desc(mean))
+# Extraction of top 10% miRNA names
+#   - select miRNA names from top 10% highest expressed miRNAs
+top_miRNAs <- miRNA_means$miRNA[1:ceiling(nrow(miRNA_means) * 0.1)]
+
+# Acquisition of validated liver miRNAs from miRTarBase
+dir_mirtarbase <- "miRTarBase"
+mirtarbase <- read.csv(file.path(dir_mirtarbase, "hsa_MTI.csv"), stringsAsFactors = FALSE) %>% 
+  filter(miRNA %in% top_miRNAs) %>% distinct(miRTarBase.ID, .keep_all = TRUE)
+validated_liver_mirna <- unique(mirtarbase$miRNA) %>% sub("^hsa-", "", .)
+
+# Extraction of all target genes for liver miRNAs from TargetScan
+liver_targets <- targets_info %>%
+  mutate(miR.Family = strsplit(miR.Family, "/")) %>% 
+  unnest(miR.Family) %>% 
+  # Screen for matching miRNA families
+  filter(miR.Family %in% validated_liver_mirna) %>% 
+  mutate(Gene.ID = sub("\\..*", "", Gene.ID)) %>% 
+  distinct(Gene.ID, .keep_all = TRUE)
+
+# Label target genes in single-cell data
+rowData(sce)$miRNA_target <- ifelse(
+  rownames(sce) %in% liver_targets$Gene.ID,
+  "Target",
+  "Non-target"
+)
+
+# Analyse target gene distribution
+gene_stats <- as.data.frame(rowData(sce)) %>%
+  mutate(
+    gene_class = factor(VG, levels = c("HVG", "LVG", "Other")),
+    is_target = miRNA_target == "Target"
+  )
