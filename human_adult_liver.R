@@ -244,3 +244,44 @@ chain <- BASiCS_MCMC(
 )
 # Load saved MCMC chain (RDS format)
 chain <- readRDS(file.path(dir, "chain_human_adult_liver.Rds"))
+
+# Create diagnostic plots directory if not exists
+#   - dir: Parent directory path
+#   - mcmc_cd_path: Subdirectory for storing diagnostic plots (MCMC convergence diagnostics)
+mcmc_cd_path <- file.path(dir, "MCMC convergence diagnostics")
+if (!dir.exists(mcmc_cd_path)) {
+  dir.create(mcmc_cd_path, recursive = TRUE)
+}
+
+# Geweke Diagnostic Plot
+#   - test whether the mean of the first 10% of chain differs from last 50%
+#   - red dashed lines at ±3 indicate significant divergence (p<0.01)
+p5 <- BASiCS_DiagPlot(
+  chain,
+  Param = "mu",                       # Check convergence for gene means
+  Measure = "geweke") +               # Geweke's convergence diagnostic
+  theme(legend.position = "bottom") +
+  geom_hline(yintercept = c(-3, 3),
+             linetype = "dashed",     # Threshold lines for significance
+             color = "red")
+# Save Plot 5
+p5_path <- file.path(mcmc_cd_path, "Geweke.png")
+ggsave(p5_path, plot = p5, width = 10, height = 5, dpi = 600)
+
+# Effective Sample Size (ESS) Plot
+#   - measure how many independent samples the chain contains
+#   - higher ESS indicates better mixing
+p6 <- BASiCS_DiagPlot(
+  chain,
+  Param = "mu",
+  Measure = "ess") +                  # Effective sample size
+  theme(legend.position = "bottom")
+# Save Plot 6
+p6_path <- file.path(mcmc_cd_path, "ESS.png")
+ggsave(p6_path, plot = p6, width = 10, height = 5, dpi = 600)
+
+# Combined Diagnostic Plot
+#   - visualise both Geweke and ESS diagnostics side-by-side
+p7 <- geweke + ess + plot_annotation(tag_levels = "A") # Add panel labels
+p7_path <- file.path(mcmc_cd_path, "Geweke_ESS.png")
+ggsave(p7_path, plot = p7, width = 10, height = 5, dpi = 600)
