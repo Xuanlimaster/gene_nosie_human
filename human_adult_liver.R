@@ -183,23 +183,24 @@ keep_genes <- rowSums(counts(sce) > 0) > 20  # Expressed in at least 20 cells
 # Filter SingleCellExperiment object
 sce <- sce[keep_genes, qc.lib & qc.nexprs & qc.mito]
 
-sce <- logNormCounts(sce)         # Data normalization
-dec <- modelGeneVar(sce)          # Gene variance modeling - decomposes technical and biological variation
+sce_dup <- sce
+sce_dup <- logNormCounts(sce_dup)         # Data normalization
+dec <- modelGeneVar(sce_dup)          # Gene variance modeling - decomposes technical and biological variation
 hvg <- getTopHVGs(dec, n = 2000)  # Selects top 2000 most biologically variable genes
 # Dimensional reduction (PCA -> UMAP)
-sce <- runPCA(sce,
+sce_dup <- runPCA(sce_dup,
               subset_row = hvg,   # Use only HVGs for PCA
               exprs_values = "logcounts",
               BSPARAM = BiocSingular::IrlbaParam())  # Fast approximate PCA
-umap <- calculateUMAP(sce, 
+umap <- calculateUMAP(sce_dup, 
                       dimred = "PCA",
                       n_neighbors = 15,
                       min_dist = 0.1,
                       metric = "cosine") # Suitable for sparse scRNA-seq data
-reducedDim(sce, "UMAP") <- umap
+reducedDim(sce_dup, "UMAP") <- umap
 
 # Batch effect visualization - UMAP colored by batch
-p4 <- plotReducedDim(sce, dimred = "UMAP",
+p4 <- plotReducedDim(sce_dup, dimred = "UMAP",
                      colour_by = "BatchInfo",
                      point_size = 1.5) +
   ggtitle("UMAP by Batch") +
@@ -212,9 +213,9 @@ ggsave(p4_path, p4, width = 10, height = 6, dpi = 600)
 # Batch Effect Quantification
 #   - Calculates mean Euclidean distance of cells to their batch centroid in UMAP space
 #   - Higher values indicate more dispersed batches, suggesting stronger batch effects
-batch_score <- reducedDim(sce, "UMAP") %>% 
+batch_score <- reducedDim(sce_dup, "UMAP") %>% 
   as.data.frame() %>%
-  mutate(Batch = sce$BatchInfo) %>% 
+  mutate(Batch = sce_dup$BatchInfo) %>% 
   group_by(Batch) %>% 
   summarise(
     Distance_to_centroid = mean(stats::dist(cbind(UMAP1, UMAP2))),
