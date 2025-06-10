@@ -285,3 +285,42 @@ ggsave(p6_path, plot = p6, width = 10, height = 5, dpi = 600)
 p7 <- geweke + ess + plot_annotation(tag_levels = "A") # Add panel labels
 p7_path <- file.path(mcmc_cd_path, "Geweke_ESS.png")
 ggsave(p7_path, plot = p7, width = 10, height = 5, dpi = 600)
+
+# Extract MCMC summary statistics from the BASiCS chain object
+mcmc_summary <- Summary(chain)
+# Create data frame of key gene-level parameters:
+#   - mean: Baseline expression (μ)
+#   - overdisp: Biological overdispersion (δ)
+#   - residualoverdisp: Residual overdispersion (ε)
+mcmc_parameter <- data.frame(
+  mean = displaySummaryBASiCS(mcmc_summary, Param = "mu")[, 1],
+  overdisp = displaySummaryBASiCS(mcmc_summary, Param = "delta")[, 1],
+  residualoverdisp = displaySummaryBASiCS(mcmc_summary, Param = "epsilon")[, 1]
+)
+
+# Detect Highly Variable Genes (HVGs)
+hvg <- BASiCS_DetectHVG(
+  chain,
+  EpsilonThreshold = log(2)) # 2-fold change in residual variation
+# Detect Lowly Variable Genes (LVGs)
+lvg <- BASiCS_DetectLVG(
+  chain,
+  EpsilonThreshold = -log(2))
+# Merge HVG and LVG results into unified table
+vg_table <- merge(
+  as.data.frame(lvg, Filter = FALSE), # LVG results (include all genes)
+  as.data.frame(hvg, Filter = FALSE), # HVG results (include all genes)
+  by = c("GeneName", "GeneIndex", "Mu", "Delta", "Epsilon"), # Merge keys
+  suffixes = c("LVG", "HVG")          # Suffixes for overlapping columns
+)
+# Genes are exclusive as HVG/LVG/Neither
+vg_table$VG <- "Not HVG or LVG"     # Default classification
+vg_table$VG[vg_table$HVG] <- "HVG"  # Mark HVGs (ε > log(2))
+vg_table$VG[vg_table$LVG] <- "LVG"  # Mark LVGs (ε < -log(2))
+# Integrate results with gene metadata in SingleCellExperiment object
+rowData(sce) <- merge(
+  data.frame(ensembl_gene_id = rownames(sce), rowData(sce)),
+  vg_table,
+  by.x = "ensembl_gene_id", by.y = "GeneName",
+  sort = FALSE
+)
