@@ -182,3 +182,18 @@ qc.mito <- sce$subsets_Mito_percent < 10  # MT% < 10%
 keep_genes <- rowSums(counts(sce) > 0) > 20  # Expressed in at least 20 cells
 # Filter SingleCellExperiment object
 sce <- sce[keep_genes, qc.lib & qc.nexprs & qc.mito]
+
+sce <- logNormCounts(sce)         # Data normalization
+dec <- modelGeneVar(sce)          # Gene variance modeling - decomposes technical and biological variation
+hvg <- getTopHVGs(dec, n = 2000)  # Selects top 2000 most biologically variable genes
+# Dimensional reduction (PCA -> UMAP)
+sce <- runPCA(sce,
+              subset_row = hvg,   # Use only HVGs for PCA
+              exprs_values = "logcounts",
+              BSPARAM = BiocSingular::IrlbaParam())  # Fast approximate PCA
+umap <- calculateUMAP(sce, 
+                      dimred = "PCA",
+                      n_neighbors = 15,
+                      min_dist = 0.1,
+                      metric = "cosine") # Suitable for sparse scRNA-seq data
+reducedDim(sce, "UMAP") <- umap
