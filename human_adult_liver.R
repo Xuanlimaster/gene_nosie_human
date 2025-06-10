@@ -197,3 +197,31 @@ umap <- calculateUMAP(sce,
                       min_dist = 0.1,
                       metric = "cosine") # Suitable for sparse scRNA-seq data
 reducedDim(sce, "UMAP") <- umap
+
+# Batch effect visualization - UMAP colored by batch
+p4 <- plotReducedDim(sce, dimred = "UMAP",
+                     colour_by = "BatchInfo",
+                     point_size = 1.5) +
+  ggtitle("UMAP by Batch") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+# Save Plot 4
+p4_path <- file.path(qc_path, "QC_Filtering_Matrix.png")
+ggsave(p4_path, p4, width = 10, height = 6, dpi = 600)
+
+# Batch Effect Quantification
+#   - Calculates mean Euclidean distance of cells to their batch centroid in UMAP space
+#   - Higher values indicate more dispersed batches, suggesting stronger batch effects
+batch_score <- reducedDim(sce, "UMAP") %>% 
+  as.data.frame() %>%
+  mutate(Batch = sce$BatchInfo) %>% 
+  group_by(Batch) %>% 
+  summarise(
+    Distance_to_centroid = mean(stats::dist(cbind(UMAP1, UMAP2))),
+    .groups = "drop"
+  )
+# Interpretation:
+#   - Scores range from 3.41 (donor3_S1) to 9.65 (donor4_S1)
+#   - Similar scores for technical replicates (e.g. donor2_S1/S2 = 7.39/7.39)
+#   - Large differences suggest batch effects needing correction
+print(batch_score)
