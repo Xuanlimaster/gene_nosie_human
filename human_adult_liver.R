@@ -387,3 +387,80 @@ gene_stats <- as.data.frame(rowData(sce)) %>%
     gene_class = factor(VG, levels = c("HVG", "LVG", "Other")),
     is_target = miRNA_target == "Target"
   )
+
+# Create nosie comparison plots directory if not exists
+#   - dir: Parent directory path
+#   - noise_path: Subdirectory for storing nosie comparison plots (Gene expression nosie comparison)
+noise_path <- file.path(dir, "Gene expression nosie comparison")
+if (!dir.exists(noise_path)) {
+  dir.create(noise_path, recursive = TRUE)
+}
+# Chi-square test for target gene proportions
+count_data <- as.data.frame(rowData(sce)) %>% 
+  filter(VG %in% c("HVG", "LVG")) %>% 
+  group_by(VG, miRNA_target) %>% 
+  summarise(n = n()) %>% 
+  tidyr::pivot_wider(names_from = miRNA_target, values_from = n, values_fill = 0)
+chisq_test <- chisq.test(as.matrix(count_data[, c("Target", "Non-target")]))
+p_label_chisq <- ifelse(chisq_test$p.value < 0.001,
+                        "P < 0.001",
+                        sprintf("P = %.3f", chisq_test$p.value))
+x2_label <- sprintf("X² = %.2f", chisq_test$statistic)
+
+# Target gene proportion plot
+p8 <- ggplot(gene_stats %>% filter(gene_class %in% c("HVG", "LVG")), 
+             aes(x = gene_class, fill = is_target)) +
+  geom_bar(position = "fill", width = 0.6, alpha = 0.7) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("skyblue", "salmon"),
+                    labels = c("Non-target", "Target"),
+                    name = "") + 
+  labs(x = "Gene Category", y = "Proportion", 
+       title = "Liver miRNA Targets Distribution",
+       subtitle = paste("Chi-square test:", x2_label, ",", p_label_chisq)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        legend.position = "top")
+# Save Plot 8
+p8_path <- file.path(noise_path, "Geweke.png")
+ggsave(p8_path, plot = p8, width = 10, height = 5, dpi = 600)
+
+# Wilcoxon test for expression noise
+noise_comparison <- wilcox.test(
+  Epsilon ~ miRNA_target, 
+  data = as.data.frame(rowData(sce))
+)
+p_label <- ifelse(noise_comparison$p.value < 0.001, 
+                  "P < 0.001", 
+                  sprintf("P = %.3f", noise_comparison$p.value))
+w_label <- sprintf("W = %.0f", noise_comparison$statistic)
+
+# Expression noise comparison boxplot
+p9 <- ggplot(rowData(sce), aes(x = miRNA_target, y = Epsilon, fill = miRNA_target)) +
+  geom_boxplot(
+    width = 0.6,
+    outlier.shape = 21,
+    outlier.size = 2,
+    outlier.color = "black",
+    alpha = 0.7
+  ) +
+  scale_fill_manual(values = c("skyblue", "salmon")) +
+  labs(x = NULL, y = "Residual Over-dispersion",
+       title = "Expression Noise Comparison",
+       subtitle = paste("Wilcoxon test:", w_label, ",", p_label)) +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        plot.subtitle = element_text(hjust = 0.5, size = 12),
+        legend.position = "none")
+# Save Plot 9
+p9_path <- file.path(noise_path, "Geweke.png")
+ggsave(p9_path, plot = p9, width = 10, height = 5, dpi = 600)
+
+# Combined plot
+p10 <- p8 + p9 +
+  plot_layout(widths = c(1, 1)) +
+  plot_annotation(tag_levels = 'A')
+# Save Plot 10
+p10_path <- file.path(noise_path, "Geweke.png")
+ggsave(p10_path, plot = p10, width = 10, height = 5, dpi = 600)
