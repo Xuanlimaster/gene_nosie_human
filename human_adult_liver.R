@@ -3,7 +3,6 @@ suppressPackageStartupMessages({
   library(Seurat)
   library(scran)
   library(scater)
-  library(Matrix)
   library(batchelor)
   library(data.table)
   library(tidyverse)
@@ -12,9 +11,7 @@ suppressPackageStartupMessages({
   library(biomaRt)
   library(SingleCellExperiment)
   library(BASiCS)
-  library(harmony)
   library(arrow)
-  library(tidyr)
 })
 
 dir <- "human_adult_liver"
