@@ -365,16 +365,46 @@ validated_liver_mirna <- unique(mirtarbase$miRNA) %>% sub("^hsa-", "", .)
 
 # Extraction of all target genes for liver miRNAs from TargetScan
 liver_targets <- targets_info %>%
+  filter(Species.ID == 9606) # Human
   mutate(miR.Family = strsplit(miR.Family, "/")) %>% 
   unnest(miR.Family) %>% 
   # Screen for matching miRNA families
   filter(miR.Family %in% validated_liver_mirna) %>% 
   mutate(Gene.ID = sub("\\..*", "", Gene.ID)) %>% 
-  distinct(Gene.ID, .keep_all = TRUE)
+  # Join with conserved scores data
+  left_join(
+    conserved_scores %>%
+      filter(Gene.Tax.ID == 9606) %>% # Human
+      mutate(
+        Gene.ID = sub("\\..*", "", Gene.ID),
+        miRNA = sub("^.*-miR-", "miR-", miRNA) # Remove prefix
+      ),
+    by = c("Gene.ID", "miR.Family" = "miRNA"),
+    relationship = "many-to-many"
+  ) %>%
+  # Filter based on TargetScan scores
+  filter(
+    context...score < -0.5,
+    context...score.percentile > 90
+  )
+
+# Generate gene-miRNA interaction summary table
+#   - Input: liver_targets (dataframe containing Gene.ID and miR.Family columns)
+#   - Output: tibble with aggregated miRNA targeting information per gene
+gene_mirna_summary <- liver_targets %>%
+  # Select only relevant columns to minimise memory usage
+  dplyr::select(Gene.ID, miR.Family) %>%
+  # Calculate the number of target sites for each gene
+  group_by(Gene.ID) %>%
+  summarise(
+    target.number = n(),
+    miRNA = paste(unique(miR.Family), collapse = "/")  # Merge all target miRNAs
+  ) %>%
+  ungroup() # Remove grouping structure for downstream operations
 
 # Label target genes in single-cell data
 rowData(sce)$miRNA_target <- ifelse(
-  rownames(sce) %in% liver_targets$Gene.ID,
+  rownames(sce) %in% gene_mirna_summary$Gene.ID,
   "Target",
   "Non-target"
 )
