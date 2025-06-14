@@ -472,7 +472,7 @@ p9 <- ggplot(rowData(sce), aes(x = miRNA_target, y = Epsilon, fill = miRNA_targe
     alpha = 0.7
   ) +
   scale_fill_manual(values = c("skyblue", "salmon")) +
-  labs(x = NULL, y = "Residual Over-dispersion",
+  labs(x = NULL, y = "Biological Overdispersion",
        title = "Expression Noise Comparison",
        subtitle = paste("Wilcoxon test:", w_label, ",", p_label)) +
   theme_classic() +
