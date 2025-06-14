@@ -33,12 +33,10 @@ metadata <- fread(file.path(dir, "E-MTAB-10553.cell_metadata.tsv")) %>%
   mutate(BioSD_SAMPLE = str_extract(id, "^[^-]+")) %>%
   left_join(
     read.delim(file.path(dir, "E-MTAB-10553.sdrf.txt")) %>%
-      dplyr::select(where(~ n_distinct(.) > 1)) %>% # Remove constant columns
       dplyr::select(
+        where(~ n_distinct(.) > 1), # Remove constant columns
         BioSD_SAMPLE = "Comment.BioSD_SAMPLE.",
-        ENA_SAMPLE = "Comment.ENA_SAMPLE.",
-        Source = "Source.Name",
-        BatchInfo = "Source.Name" # BatchInfo duplicates Source.Name
+        BatchInfo = "Comment.ENA_SAMPLE." # Comment.ENA_SAMPLE. as BatchInfo
       ) %>%
       distinct(BioSD_SAMPLE, .keep_all = TRUE), 
     by = "BioSD_SAMPLE"
@@ -280,7 +278,7 @@ ggsave(p6_path, plot = p6, width = 10, height = 5, dpi = 600)
 
 # Combined Diagnostic Plot
 #   - visualise both Geweke and ESS diagnostics side-by-side
-p7 <- geweke + ess + plot_annotation(tag_levels = "A") # Add panel labels
+p7 <- p5 + p6 + plot_annotation(tag_levels = "A") # Add panel labels
 p7_path <- file.path(mcmc_cd_path, "Geweke_ESS.png")
 ggsave(p7_path, plot = p7, width = 10, height = 5, dpi = 600)
 
@@ -354,18 +352,18 @@ miRNA_means <- liver_mirna %>%
   enframe(name = "miRNA", value = "mean") %>%
   arrange(desc(mean))
 # Extraction of top 10% miRNA names
-#   - select miRNA names from top 10% highest expressed miRNAs
-top_miRNAs <- miRNA_means$miRNA[1:ceiling(nrow(miRNA_means) * 0.1)]
+#   - select all miRNA names
+all_miRNAs <- miRNA_means$miRNA
 
 # Acquisition of validated liver miRNAs from miRTarBase
 dir_mirtarbase <- "miRTarBase"
 mirtarbase <- read.csv(file.path(dir_mirtarbase, "hsa_MTI.csv"), stringsAsFactors = FALSE) %>% 
-  filter(miRNA %in% top_miRNAs) %>% distinct(miRTarBase.ID, .keep_all = TRUE)
+  filter(miRNA %in% all_miRNAs) %>% distinct(miRTarBase.ID, .keep_all = TRUE)
 validated_liver_mirna <- unique(mirtarbase$miRNA) %>% sub("^hsa-", "", .)
 
 # Extraction of all target genes for liver miRNAs from TargetScan
 liver_targets <- targets_info %>%
-  filter(Species.ID == 9606) # Human
+  filter(Species.ID == 9606) %>%  # Human
   mutate(miR.Family = strsplit(miR.Family, "/")) %>% 
   unnest(miR.Family) %>% 
   # Screen for matching miRNA families
@@ -384,8 +382,8 @@ liver_targets <- targets_info %>%
   ) %>%
   # Filter based on TargetScan scores
   filter(
-    context...score < -0.5,
-    context...score.percentile > 90
+    context...score < 0,
+    context...score.percentile >90
   )
 
 # Generate gene-miRNA interaction summary table
@@ -412,7 +410,7 @@ rowData(sce)$miRNA_target <- ifelse(
 # Analyse target gene distribution
 gene_stats <- as.data.frame(rowData(sce)) %>%
   mutate(
-    gene_class = factor(VG, levels = c("HVG", "LVG", "Other")),
+    gene_class = factor(VG, levels = c("HVG", "LVG", "Not HVG or LVG")),
     is_target = miRNA_target == "Target"
   )
 
@@ -456,7 +454,7 @@ ggsave(p8_path, plot = p8, width = 10, height = 5, dpi = 600)
 
 # Wilcoxon test for expression noise
 noise_comparison <- wilcox.test(
-  Epsilon ~ miRNA_target, 
+  Delta ~ miRNA_target, 
   data = as.data.frame(rowData(sce))
 )
 p_label <- ifelse(noise_comparison$p.value < 0.001, 
