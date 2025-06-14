@@ -201,35 +201,34 @@ keep_genes <- rowSums(counts(sce) > 0) > 20  # Expressed in at least 20 cells
 # Filter SingleCellExperiment object
 sce <- sce[keep_genes, qc.lib & qc.nexprs & qc.mito]
 
-sce_dup <- sce
-sce_dup <- logNormCounts(sce_dup) # Data normalization
-dec <- modelGeneVar(sce_dup)      # Decompose technical and biological variation
+sce <- logNormCounts(sce) # Data normalization
+dec <- modelGeneVar(sce)      # Decompose technical and biological variation
 hvg <- getTopHVGs(dec, n = 2000)  # Select top 2000 biologically variable genes
 # Dimensional reduction (PCA -> UMAP)
-sce_dup <- runPCA(
-  sce_dup,
+sce <- runPCA(
+  sce,
   subset_row = hvg,   # Use only HVGs for PCA
   exprs_values = "logcounts",
   BSPARAM = BiocSingular::IrlbaParam()  # Fast approximate PCA
   )
 
 # Run scDblFinder to detect doublets
-sce <- scDblFinder(sce_dup, samples = "BatchInfo")
+sce <- scDblFinder(sce, samples = "BatchInfo")
 qc.doublet <- !sce$scDblFinder.class == "doublet"  # Keep singlets
 sce <- sce[, qc.doublet]          # Retain only high-quality singlets
 
 umap <- calculateUMAP(
-  sce_dup, 
+  sce, 
   dimred = "PCA",
   n_neighbors = 15,
   min_dist = 0.1,
   metric = "cosine"
   )
-reducedDim(sce_dup, "UMAP") <- umap
+reducedDim(sce, "UMAP") <- umap
 
 # Batch effect visualization - UMAP colored by batch
 p4 <- plotReducedDim(
-  sce_dup,
+  sce,
   dimred = "UMAP",
   colour_by = "BatchInfo",
   point_size = 1.5
@@ -244,9 +243,9 @@ ggsave(p4_path, p4, width = 10, height = 6, dpi = 600)
 # Batch Effect Quantification
 #   - Calculates mean Euclidean distance of cells to their batch centroid in UMAP space
 #   - Higher values indicate more dispersed batches, suggesting stronger batch effects
-batch_score <- reducedDim(sce_dup, "UMAP") %>% 
+batch_score <- reducedDim(sce, "UMAP") %>% 
   as.data.frame() %>%
-  mutate(Batch = sce_dup$BatchInfo) %>% 
+  mutate(Batch = sce$BatchInfo) %>% 
   group_by(Batch) %>% 
   summarise(
     Distance_to_centroid = mean(stats::dist(cbind(UMAP1, UMAP2))),
@@ -258,7 +257,7 @@ print(batch_score)
 
 # Run BASiCS MCMC
 chain <- BASiCS_MCMC(
-  sce, 
+  sce,
   N = 30000,                     # Total iterations
   Thin = 15,                     # Keep every 15th sample
   Burn = 15000,                  # Initial samples discarded
@@ -266,8 +265,8 @@ chain <- BASiCS_MCMC(
   WithSpikes = FALSE,            # No spike-in controls available
   PriorParam = BASiCS_PriorParam(
     sce,
-    PriorMu = "EmpiricalBayes"
-    ),                           # Empirical Bayes priors for mean expression
+    PriorMu = "EmpiricalBayes"   # Empirical Bayes priors for mean expression
+    ),
   RunName = "human_adult_liver", # Unique identifier for output
   Threads = 22,                  # Parallel processing
   StoreChains = TRUE,            # Save complete MCMC chains
